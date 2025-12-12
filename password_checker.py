@@ -252,21 +252,43 @@ def process_passwords(passwords: Iterable[str],
                       common_set: Optional[Set[str]] = None,
                       bloom: Optional[SimpleBloom] = None,
                       json_out: bool = False,
-                      csv_writer: Optional[csv.writer] = None) -> List[Dict[str, Any]]:
+                      csv_writer: Optional[csv.writer] = None,
+                      suppress_prints: bool = False) -> List[Dict[str, Any]]:
+    """
+    Evaluate passwords and return list of result dicts.
+
+    json_out: if True, print a JSON object per password as we go (useful for streaming).
+    suppress_prints: if True, do not print human-readable output (useful for batch collection).
+    """
     results = []
     for pw in passwords:
         r = score_password(pw, common_set=common_set, bloom=bloom)
         results.append(r)
+
+        # If streaming JSON output requested, print JSON per-password (stdout)
         if json_out:
-            print(json.dumps({"password": r["password"], "score": r["score"], "verdict": r["verdict"], "bits": r["bits"], "feedback": r["feedback"], "reasons": r["reasons"]}, ensure_ascii=False))
+            print(json.dumps({
+                "password": r["password"],
+                "score": r["score"],
+                "verdict": r["verdict"],
+                "bits": r["bits"],
+                "feedback": r["feedback"],
+                "reasons": r["reasons"]
+            }, ensure_ascii=False))
         else:
-            print(f"{r['password']}: score={r['score']} ({r['verdict']}), bits={r['bits']}")
-            print("  Feedback:", "; ".join(r['feedback']))
-            print("  Reasons:", ", ".join(r['reasons']))
-            print("-"*70)
+            # Only print human-friendly text when not suppressed (interactive / normal mode)
+            if not suppress_prints:
+                print(f"{r['password']}: score={r['score']} ({r['verdict']}), bits={r['bits']}")
+                print("  Feedback:", "; ".join(r['feedback']))
+                print("  Reasons:", ", ".join(r['reasons']))
+                print("-"*70)
+
+        # CSV writing is independent of printing; always write if csv_writer provided
         if csv_writer is not None:
             csv_writer.writerow([r['password'], r['score'], r['verdict'], r['bits'], " | ".join(r['feedback'])])
+
     return results
+
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Interactive Password Strength Checker")
@@ -286,13 +308,13 @@ def main(argv=None):
         if not os.path.exists(args.rockyou):
             print(f"rockyou file not found: {args.rockyou}", file=sys.stderr)
             sys.exit(2)
-        print("Loading rockyou... (this may take a moment)")
+        print("Loading rockyou... (this may take a moment)", file=sys.stderr)
         if args.bloom:
             bloom = load_rockyou_bloom(args.rockyou)
-            print("Rockyou loaded into Bloom filter (approx).")
+            print("Rockyou loaded into Bloom filter (approx).",file=sys.stderr)
         else:
             common_set = load_rockyou_set(args.rockyou)
-            print(f"Rockyou loaded as set (entries={len(common_set)}).")
+            print(f"Rockyou loaded as set (entries={len(common_set)}).", file=sys.stderr)
 
     csv_file = None
     csv_writer = None
@@ -304,32 +326,45 @@ def main(argv=None):
     try:
         # 1) examples
         if not args.no_examples:
-            print("Running example passwords:\n")
-            process_passwords(EXAMPLES, common_set=common_set, bloom=bloom, json_out=args.json, csv_writer=csv_writer)
+            print("Running example passwords:\n", file=sys.stderr)
+            results_examples = process_passwords(EXAMPLES, common_set=common_set, bloom=bloom, json_out=False, csv_writer=csv_writer, suppress_prints=True)
+            # If the user asked for JSON, print the whole examples result as a JSON array
+            if args.json:
+                print(json.dumps(results_examples, indent=2, ensure_ascii=False))
 
         # 2) file input
         if args.file:
             if not os.path.exists(args.file):
                 print(f"Input file not found: {args.file}", file=sys.stderr)
                 sys.exit(2)
-            print(f"\nReading passwords from file: {args.file}\n")
-            process_passwords(read_passwords_from_file(args.file), common_set=common_set, bloom=bloom, json_out=args.json, csv_writer=csv_writer)
+            print(f"\nReading passwords from file: {args.file}\n", file=sys.stderr)
+            results_file = process_passwords(read_passwords_from_file(args.file), common_set=common_set, bloom=bloom, json_out=False, csv_writer=csv_writer, suppress_prints=True)
+            if args.json:
+                print(json.dumps(results_file, indent=2, ensure_ascii=False))
 
         # 3) interactive
+        # default to interactive if no file and running in a TTY, or if --interactive passed
         if args.interactive or (not args.file and not args.interactive and sys.stdin.isatty()):
-            # default to interactive if no file and running in TTY
-            print("\nInteractive mode. Press Enter on empty password to quit.")
+            print("\nInteractive mode. Press Enter on empty password to quit.", file=sys.stderr)
             while True:
                 try:
                     pw = getpass("Enter password: ")
                 except (KeyboardInterrupt, EOFError):
-                    print("\nExiting interactive mode.")
+                    print("\nExiting interactive mode.", file=sys.stderr )
                     break
                 if not pw:
                     break
                 r = score_password(pw, common_set=common_set, bloom=bloom)
                 if args.json:
-                    print(json.dumps({"password": r["password"], "score": r["score"], "verdict": r["verdict"], "bits": r["bits"], "feedback": r["feedback"], "reasons": r["reasons"]}, ensure_ascii=False))
+                    # print a single JSON object per password (interactive-friendly)
+                    print(json.dumps({
+                        "password": r["password"],
+                        "score": r["score"],
+                        "verdict": r["verdict"],
+                        "bits": r["bits"],
+                        "feedback": r["feedback"],
+                        "reasons": r["reasons"]
+                    }, ensure_ascii=False))
                 else:
                     print(f"\nScore: {r['score']} ({r['verdict']}) — bits={r['bits']}")
                     print("Feedback:")
@@ -340,7 +375,8 @@ def main(argv=None):
     finally:
         if csv_file is not None:
             csv_file.close()
-            print(f"\nSaved results to {args.csv}")
+            print(f"\nSaved results to {args.csv}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()
+
