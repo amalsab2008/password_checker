@@ -50,6 +50,15 @@ Save:
 `CTRL + O` → Enter →  
 Exit: `CTRL + X`
 
+## Bloom filter cache for fast common-password checks
+
+This project supports a memory-efficient Bloom filter for fast membership tests against large lists (e.g. `rockyou.txt`).
+
+### Build a Bloom filter (one-time)
+```bash
+python3 password_checker.py --rockyou /path/to/rockyou.txt --bloom --build-bloom --bloom-cache bloom.gz
+
+
 ---
 
 
