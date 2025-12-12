@@ -1,0 +1,20 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+
+# User data / outputs
+results.csv
+password_examples.csv
+
+# Sensitive / large wordlists
+rockyou.txt
+*.gz
+*.zip
+
+# Editors
+.vscode/
+.idea/
+.DS_Store
