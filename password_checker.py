@@ -53,22 +53,26 @@ def entropy_bits(pw: str) -> float:
 
 def contains_sequence(pw: str, minlen: int = 3) -> bool:
     s = pw.lower()
-    # alphabetic/numeric sequences
+    # alphabetic/numeric sequences (sliding window of length minlen)
     for i in range(len(s) - minlen + 1):
-        chunk = s[i:i+minlen+2]
-        if len(chunk) < 3:
+        chunk = s[i:i+minlen]
+        if len(chunk) < minlen:
             continue
+        # check increasing or decreasing by exactly 1 between adjacent chars
         if all(ord(chunk[j+1]) - ord(chunk[j]) == 1 for j in range(len(chunk)-1)):
             return True
         if all(ord(chunk[j]) - ord(chunk[j+1]) == 1 for j in range(len(chunk)-1)):
             return True
-    # keyboard sequences
+
+    # keyboard sequences (check keyboard rows for substrings of length minlen)
     for row in KEYBOARD_ROWS:
         for i in range(len(row) - minlen + 1):
-            seq = row[i:i+minlen+2]
+            seq = row[i:i+minlen]
             if seq in s or seq[::-1] in s:
                 return True
+
     return False
+
 
 def long_repetitions(pw: str) -> bool:
     if re.findall(r'(.)\1{3,}', pw):  # 'aaaa'
