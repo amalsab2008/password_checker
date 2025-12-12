@@ -1,0 +1,8 @@
+score,verdict,bits,feedback
+85,Very strong,118.3,Good password! Consider using a password manager and unique passwords per site.
+81,Strong,98.5,Good password! Consider using a password manager and unique passwords per site.
+70,Strong,89.3,"Include a mix of lowercase, uppercase, digits, and symbols."
+0,Very weak,37.6,"This is a widely used password — never use common passwords. | Use at least 12 characters; longer is better (use passphrases). | Include a mix of lowercase, uppercase, digits, and symbols."
+65,Moderate,65.7,"Use at least 12 characters; longer is better (use passphrases). | Avoid sequential characters (e.g., 'abcd', '1234')."
+34,Weak,41.4,"Use at least 12 characters; longer is better (use passphrases). | Include a mix of lowercase, uppercase, digits, and symbols. | Avoid long repeated patterns like 'aaaa' or 'ababab'."
+62,Moderate,59.5,"Use at least 12 characters; longer is better (use passphrases). | Don't include obvious dates (birthdays, years)."
