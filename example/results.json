@@ -1,0 +1,137 @@
+
+Reading passwords from file: example/passwords.txt
+
+Passw0rd!Passw0rd!: score=85 (Very strong), bits=118.3
+  Feedback: Good password! Consider using a password manager and unique passwords per site.
+  Reasons: entropy_bits=118.3, length_bonus=10.0, char_classes=4
+----------------------------------------------------------------------
+S0m3$tr0ngP@ss!: score=81 (Strong), bits=98.5
+  Feedback: Good password! Consider using a password manager and unique passwords per site.
+  Reasons: entropy_bits=98.5, length_bonus=6.0, char_classes=4
+----------------------------------------------------------------------
+correcthorsebattery: score=70 (Strong), bits=89.3
+  Feedback: Include a mix of lowercase, uppercase, digits, and symbols.
+  Reasons: entropy_bits=89.3, length_bonus=10.0, char_classes=1
+----------------------------------------------------------------------
+password: score=0 (Very weak), bits=37.6
+  Feedback: This is a widely used password — never use common passwords.; Use at least 12 characters; longer is better (use passphrases).; Include a mix of lowercase, uppercase, digits, and symbols.
+  Reasons: entropy_bits=37.6, char_classes=1, penalty=common_password
+----------------------------------------------------------------------
+Qwerty123!: score=65 (Moderate), bits=65.7
+  Feedback: Use at least 12 characters; longer is better (use passphrases).; Avoid sequential characters (e.g., 'abcd', '1234').
+  Reasons: entropy_bits=65.7, char_classes=4, penalty=sequence_detected
+----------------------------------------------------------------------
+aaaa1111: score=34 (Weak), bits=41.4
+  Feedback: Use at least 12 characters; longer is better (use passphrases).; Include a mix of lowercase, uppercase, digits, and symbols.; Avoid long repeated patterns like 'aaaa' or 'ababab'.
+  Reasons: entropy_bits=41.4, char_classes=2, penalty=repetitions_detected
+----------------------------------------------------------------------
+Summer2020: score=62 (Moderate), bits=59.5
+  Feedback: Use at least 12 characters; longer is better (use passphrases).; Don't include obvious dates (birthdays, years).
+  Reasons: entropy_bits=59.5, char_classes=3, penalty=date_like
+----------------------------------------------------------------------
+[
+  {
+    "password": "Passw0rd!Passw0rd!",
+    "score": 85,
+    "verdict": "Very strong",
+    "bits": 118.3,
+    "reasons": [
+      "entropy_bits=118.3",
+      "length_bonus=10.0",
+      "char_classes=4"
+    ],
+    "feedback": [
+      "Good password! Consider using a password manager and unique passwords per site."
+    ]
+  },
+  {
+    "password": "S0m3$tr0ngP@ss!",
+    "score": 81,
+    "verdict": "Strong",
+    "bits": 98.5,
+    "reasons": [
+      "entropy_bits=98.5",
+      "length_bonus=6.0",
+      "char_classes=4"
+    ],
+    "feedback": [
+      "Good password! Consider using a password manager and unique passwords per site."
+    ]
+  },
+  {
+    "password": "correcthorsebattery",
+    "score": 70,
+    "verdict": "Strong",
+    "bits": 89.3,
+    "reasons": [
+      "entropy_bits=89.3",
+      "length_bonus=10.0",
+      "char_classes=1"
+    ],
+    "feedback": [
+      "Include a mix of lowercase, uppercase, digits, and symbols."
+    ]
+  },
+  {
+    "password": "password",
+    "score": 0,
+    "verdict": "Very weak",
+    "bits": 37.6,
+    "reasons": [
+      "entropy_bits=37.6",
+      "char_classes=1",
+      "penalty=common_password"
+    ],
+    "feedback": [
+      "This is a widely used password — never use common passwords.",
+      "Use at least 12 characters; longer is better (use passphrases).",
+      "Include a mix of lowercase, uppercase, digits, and symbols."
+    ]
+  },
+  {
+    "password": "Qwerty123!",
+    "score": 65,
+    "verdict": "Moderate",
+    "bits": 65.7,
+    "reasons": [
+      "entropy_bits=65.7",
+      "char_classes=4",
+      "penalty=sequence_detected"
+    ],
+    "feedback": [
+      "Use at least 12 characters; longer is better (use passphrases).",
+      "Avoid sequential characters (e.g., 'abcd', '1234')."
+    ]
+  },
+  {
+    "password": "aaaa1111",
+    "score": 34,
+    "verdict": "Weak",
+    "bits": 41.4,
+    "reasons": [
+      "entropy_bits=41.4",
+      "char_classes=2",
+      "penalty=repetitions_detected"
+    ],
+    "feedback": [
+      "Use at least 12 characters; longer is better (use passphrases).",
+      "Include a mix of lowercase, uppercase, digits, and symbols.",
+      "Avoid long repeated patterns like 'aaaa' or 'ababab'."
+    ]
+  },
+  {
+    "password": "Summer2020",
+    "score": 62,
+    "verdict": "Moderate",
+    "bits": 59.5,
+    "reasons": [
+      "entropy_bits=59.5",
+      "char_classes=3",
+      "penalty=date_like"
+    ],
+    "feedback": [
+      "Use at least 12 characters; longer is better (use passphrases).",
+      "Don't include obvious dates (birthdays, years)."
+    ]
+  }
+]
