@@ -18,3 +18,5 @@ rockyou.txt
 .vscode/
 .idea/
 .DS_Store
+bloom.gz
+*.gz

@@ -11,6 +11,7 @@ Features:
  - Optional Bloom filter backing for rockyou for memory-efficiency
  - CSV and JSON outputs
  - Examples included (can be disabled)
+ - Bloom cache save/load (gzip + pickle) via --bloom-cache
 """
 
 from __future__ import annotations
@@ -22,6 +23,8 @@ import os
 import re
 import sys
 import hashlib
+import gzip
+import pickle
 from getpass import getpass
 from typing import Iterable, Tuple, Dict, Any, Optional, List, Set
 
@@ -44,6 +47,8 @@ def estimate_pool_size(pw: str) -> int:
 
 def entropy_bits(pw: str) -> float:
     pool = estimate_pool_size(pw)
+    # avoid math domain errors
+    pool = max(1, pool)
     return len(pw) * math.log2(pool)
 
 def contains_sequence(pw: str, minlen: int = 3) -> bool:
@@ -101,17 +106,14 @@ class SimpleBloom:
     """
     def __init__(self, capacity: int = 2_000_000, error_rate: float = 0.001):
         # determine bit array size m and k hash functions
-        # using approximate formulas: m = -n ln(p) / (ln2^2), k = (m/n) ln2
         n = max(1, capacity)
         p = max(1e-6, min(0.5, error_rate))
         m = int(-n * math.log(p) / (math.log(2)**2))
         k = max(1, int((m / n) * math.log(2)))
         self.size = m
         self.k = k
-        # bytearray for bits
         self.bits = bytearray((m + 7) // 8)
     def _hashes(self, s: str):
-        # create k hash positions from sha256(s + i)
         for i in range(self.k):
             h = hashlib.sha256(f"{i}:{s}".encode("utf-8")).digest()
             pos = int.from_bytes(h[:8], "big") % self.size
@@ -130,7 +132,6 @@ def is_common_or_similar(pw: str, common_set: Optional[Set[str]]=None, bloom: Op
     if common_set is not None:
         if s in common_set:
             return ("common", 1.0)
-        # similarity: check top short list only to avoid cost; fallback to built-in
         for c in ("password","123456","qwerty","abc123","letmein","iloveyou","admin"):
             d = levenshtein(s, c)
             if d <= 2 and len(s) >= max(4, len(c)-1):
@@ -171,7 +172,6 @@ def score_password(pw: str, common_set: Optional[Set[str]]=None, bloom: Optional
     if has_date_like(pw):
         score -= 8
         reasons.append("penalty=date_like")
-    # keyboard cluster
     s = pw.lower()
     keyboard_cluster = (len(s) >= 4) and (all(ch in "qwertyuiop" for ch in s) or all(ch in "asdfghjkl" for ch in s) or all(ch in "zxcvbnm" for ch in s))
     if keyboard_cluster:
@@ -232,6 +232,17 @@ def load_rockyou_bloom(path: str, capacity: int = 3_000_000, error_rate: float =
                 b.add(pw)
     return b
 
+def save_bloom_to_file(b: SimpleBloom, path: str) -> None:
+    with gzip.open(path, "wb") as fh:
+        pickle.dump(b, fh, protocol=pickle.HIGHEST_PROTOCOL)
+
+def load_bloom_from_file(path: str) -> SimpleBloom:
+    with gzip.open(path, "rb") as fh:
+        obj = pickle.load(fh)
+        if not isinstance(obj, SimpleBloom):
+            raise ValueError("Loaded object is not a SimpleBloom instance")
+        return obj
+
 def read_passwords_from_file(path: str) -> Iterable[str]:
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
@@ -257,16 +268,16 @@ def process_passwords(passwords: Iterable[str],
     """
     Evaluate passwords and return list of result dicts.
 
-    json_out: if True, print a JSON object per password as we go (useful for streaming).
-    suppress_prints: if True, do not print human-readable output (useful for batch collection).
+    json_out: print JSON per-password as we go (streaming).
+    suppress_prints: if True, do not print human-readable text (useful for batch collection).
     """
     results = []
     for pw in passwords:
         r = score_password(pw, common_set=common_set, bloom=bloom)
         results.append(r)
 
-        # If streaming JSON output requested, print JSON per-password (stdout)
         if json_out:
+            # streaming JSON per password
             print(json.dumps({
                 "password": r["password"],
                 "score": r["score"],
@@ -276,19 +287,16 @@ def process_passwords(passwords: Iterable[str],
                 "reasons": r["reasons"]
             }, ensure_ascii=False))
         else:
-            # Only print human-friendly text when not suppressed (interactive / normal mode)
             if not suppress_prints:
                 print(f"{r['password']}: score={r['score']} ({r['verdict']}), bits={r['bits']}")
                 print("  Feedback:", "; ".join(r['feedback']))
                 print("  Reasons:", ", ".join(r['reasons']))
                 print("-"*70)
 
-        # CSV writing is independent of printing; always write if csv_writer provided
         if csv_writer is not None:
             csv_writer.writerow([r['password'], r['score'], r['verdict'], r['bits'], " | ".join(r['feedback'])])
 
     return results
-
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Interactive Password Strength Checker")
@@ -296,6 +304,8 @@ def main(argv=None):
     parser.add_argument("--file", help="File with passwords (one per line)")
     parser.add_argument("--rockyou", help="Path to rockyou.txt (local file only)")
     parser.add_argument("--bloom", action="store_true", help="Use Bloom filter for rockyou (memory-efficient)")
+    parser.add_argument("--bloom-cache", help="Path to save/load bloom filter (gzip-picked)")
+    parser.add_argument("--build-bloom", action="store_true", help="Build bloom from rockyou and save to --bloom-cache")
     parser.add_argument("--csv", help="Save results to CSV file")
     parser.add_argument("--json", action="store_true", help="Print JSON output")
     parser.add_argument("--no-examples", action="store_true", help="Don't run built-in example list")
@@ -304,15 +314,36 @@ def main(argv=None):
     common_set = None
     bloom = None
 
+    # --- rockyou / bloom handling ---
     if args.rockyou:
         if not os.path.exists(args.rockyou):
             print(f"rockyou file not found: {args.rockyou}", file=sys.stderr)
             sys.exit(2)
-        print("Loading rockyou... (this may take a moment)", file=sys.stderr)
-        if args.bloom:
+
+        # if a cache path was provided and exists, try loading it
+        if args.bloom_cache and os.path.exists(args.bloom_cache):
+            try:
+                print(f"Loading Bloom filter from cache: {args.bloom_cache}", file=sys.stderr)
+                bloom = load_bloom_from_file(args.bloom_cache)
+                print("Bloom filter loaded from cache.", file=sys.stderr)
+            except Exception as e:
+                print(f"Failed to load bloom cache ({args.bloom_cache}): {e}", file=sys.stderr)
+                bloom = None
+
+        # build bloom if requested or if bloom flag set but no cache loaded
+        if (args.bloom and bloom is None) or args.build_bloom:
+            print("Building Bloom filter from rockyou... (this may take a while)", file=sys.stderr)
             bloom = load_rockyou_bloom(args.rockyou)
-            print("Rockyou loaded into Bloom filter (approx).",file=sys.stderr)
-        else:
+            print("Bloom built from rockyou.", file=sys.stderr)
+            if args.bloom_cache:
+                try:
+                    save_bloom_to_file(bloom, args.bloom_cache)
+                    print(f"Saved bloom cache to {args.bloom_cache}", file=sys.stderr)
+                except Exception as e:
+                    print(f"Failed to save bloom cache: {e}", file=sys.stderr)
+
+        # if user didn't request bloom, but rockyou is given, load as set
+        if not args.bloom and bloom is None and not args.build_bloom:
             common_set = load_rockyou_set(args.rockyou)
             print(f"Rockyou loaded as set (entries={len(common_set)}).", file=sys.stderr)
 
@@ -327,9 +358,10 @@ def main(argv=None):
         # 1) examples
         if not args.no_examples:
             print("Running example passwords:\n", file=sys.stderr)
-            results_examples = process_passwords(EXAMPLES, common_set=common_set, bloom=bloom, json_out=False, csv_writer=csv_writer, suppress_prints=True)
-            # If the user asked for JSON, print the whole examples result as a JSON array
+            results_examples = process_passwords(EXAMPLES, common_set=common_set, bloom=bloom,
+                                                 json_out=False, csv_writer=csv_writer, suppress_prints=True)
             if args.json:
+                # print as a single JSON array for batch mode
                 print(json.dumps(results_examples, indent=2, ensure_ascii=False))
 
         # 2) file input
@@ -338,25 +370,25 @@ def main(argv=None):
                 print(f"Input file not found: {args.file}", file=sys.stderr)
                 sys.exit(2)
             print(f"\nReading passwords from file: {args.file}\n", file=sys.stderr)
-            results_file = process_passwords(read_passwords_from_file(args.file), common_set=common_set, bloom=bloom, json_out=False, csv_writer=csv_writer, suppress_prints=True)
+            results_file = process_passwords(read_passwords_from_file(args.file), common_set=common_set,
+                                             bloom=bloom, json_out=False, csv_writer=csv_writer, suppress_prints=True)
             if args.json:
                 print(json.dumps(results_file, indent=2, ensure_ascii=False))
 
         # 3) interactive
-        # default to interactive if no file and running in a TTY, or if --interactive passed
         if args.interactive or (not args.file and not args.interactive and sys.stdin.isatty()):
             print("\nInteractive mode. Press Enter on empty password to quit.", file=sys.stderr)
             while True:
                 try:
                     pw = getpass("Enter password: ")
                 except (KeyboardInterrupt, EOFError):
-                    print("\nExiting interactive mode.", file=sys.stderr )
+                    print("\nExiting interactive mode.", file=sys.stderr)
                     break
                 if not pw:
                     break
                 r = score_password(pw, common_set=common_set, bloom=bloom)
                 if args.json:
-                    # print a single JSON object per password (interactive-friendly)
+                    # streaming JSON per password in interactive mode
                     print(json.dumps({
                         "password": r["password"],
                         "score": r["score"],
