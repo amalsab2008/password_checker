@@ -20,3 +20,10 @@ rockyou.txt
 .DS_Store
 bloom.gz
 *.gz
+bloom.gz
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+*.gz
